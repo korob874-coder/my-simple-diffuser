@@ -27,15 +27,24 @@ class SimpleUNet(nn.Module):
         )
     
     def forward(self, x, t):
-        # x: input image, t: timestep (akan kita sederhanakan)
-        
         # Encoder
-        e1 = self.enc1(x)
-        e2 = self.enc2(F.max_pool2d(e1, 2))
-        e3 = self.enc3(F.max_pool2d(e2, 2))
+        e1 = self.enc1(x)                    # [batch, 64, 64, 64]
+        e2 = self.enc2(F.max_pool2d(e1, 2))  # [batch, 128, 32, 32] 
+        e3 = self.enc3(F.max_pool2d(e2, 2))  # [batch, 256, 16, 16]
         
-        # Decoder dengan skip connections
-        d2 = self.dec2(torch.cat([e3, e2], dim=1))
-        d1 = self.dec1(torch.cat([d2, e1], dim=1))
+        # Decoder dengan skip connections + UPSAMPLING
+        # Upsample e3 untuk match ukuran e2
+        e3_upsampled = F.interpolate(e3, scale_factor=2, mode='bilinear', align_corners=False)
+        # e3_upsampled: [batch, 256, 32, 32]
+        # e2: [batch, 128, 32, 32] 
+        
+        d2 = self.dec2(torch.cat([e3_upsampled, e2], dim=1))  # [batch, 256+128=384, 32, 32] -> [batch, 128, 32, 32]
+        
+        # Upsample d2 untuk match ukuran e1
+        d2_upsampled = F.interpolate(d2, scale_factor=2, mode='bilinear', align_corners=False)
+        # d2_upsampled: [batch, 128, 64, 64]
+        # e1: [batch, 64, 64, 64]
+        
+        d1 = self.dec1(torch.cat([d2_upsampled, e1], dim=1))  # [batch, 128+64=192, 64, 64] -> [batch, 64, 64, 64]
         
         return self.final(d1)
